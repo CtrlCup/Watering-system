@@ -1,21 +1,22 @@
 /* 
   #########################################
   #      Bewesserungssystem by Alex       #
-  #      v. 1.0                           #
+  #      v. 1.1                           #
   #########################################
  */
+ #include <Preferences.h>
 
  #define SOIL_SENSOR_PIN 0
- #define led 8
  #define waterPump 1
- #define waterSensor 3
+ #define buzzer 2
+ #define led 8
  #define waterON 2200
  #define waterOFF 1700
- #define buzzer 2
  
  // Nasse Erde 1660    Wasser ist unten im Topf angekommen
  // Außerhalb vom Blumentopf => 3050
  
+ Preferences preferences;
  
  void blinkLED()
  {
@@ -30,18 +31,33 @@
  
  void setup() {
      Serial.begin(115200);
+     while (!Serial) {
+       delay(100);
+     }
+     Serial.println("");
      Serial.println("ESP32 booting...");
      pinMode(SOIL_SENSOR_PIN, INPUT);
      pinMode(led, OUTPUT);
      pinMode(waterPump, OUTPUT);
-     pinMode(waterSensor, INPUT);
      pinMode(buzzer, OUTPUT);
  
      int sensorValue = analogRead(SOIL_SENSOR_PIN);
      float voltage = sensorValue * (3.3 / 4095.0);
      bool waterEmpty = false;
-     //int waterSensorINT = analogRead(waterSensor);
+     int waterings = 0; 
+     int dry_runs = 0; 
  
+     preferences.begin("waterings", false);
+ 
+     waterings = preferences.getInt("waterings", 0);
+     dry_runs = preferences.getInt("dry_runs", 0);
+ 
+     Serial.println("");
+     Serial.print("Gesamtanzahl erfolgreicher Bewässerungen: ");
+     Serial.println(waterings);
+     Serial.print("Fehlgeschlagene Versuche (Wassertank leer): ");
+     Serial.println(dry_runs);
+     
      Serial.print("Sensor Value: ");
      Serial.print(sensorValue);
      Serial.print(" | Voltage: ");
@@ -53,15 +69,16 @@
      if (sensorValue < waterON) {
          digitalWrite(led, HIGH);
          digitalWrite(waterPump, LOW);
+         waterings++;
      } else if (sensorValue > waterOFF) {
          digitalWrite(led, LOW);
          digitalWrite(waterPump, HIGH);
      }
  
      // Zusätzliche Wartezeit
-     delay(5000); // 5 Sekunden warten, um serielle Ausgaben zu sehen
+     delay(10000); // 5 Sekunden warten, um serielle Ausgaben zu sehen
      sensorValue = analogRead(SOIL_SENSOR_PIN);
-     if ((sensorValue < waterOFF))
+     if (sensorValue < waterOFF)
      {
        break;
        waterEmpty = false;
@@ -71,9 +88,15 @@
        if (i == 2) waterEmpty = true;
      }
      
+     if (waterEmpty) dry_runs++;
      digitalWrite(led, HIGH);
      digitalWrite(waterPump, LOW);
    }
+ 
+   preferences.putInt("waterings", waterings);
+   preferences.putInt("dry_runs", dry_runs);
+   
+   preferences.end();
  
    if (waterEmpty)
    {
@@ -87,14 +110,14 @@
      waterEmpty = false;
      blinkLED();
      Serial.println("Wasserbehälter leer");
-     esp_sleep_enable_timer_wakeup(1 * 1000000); // 1 Stunde
+     esp_sleep_enable_timer_wakeup(5 * 1000000); // 1 Stunde
      esp_deep_sleep_start();
    }
    else
    {
      blinkLED();
      Serial.println("Gehe in den Tiefschlaf");
-     esp_sleep_enable_timer_wakeup(4 * 1000000); // 15 Sekunden
+     esp_sleep_enable_timer_wakeup(10 * 1000000); // 15 Sekunden
      esp_deep_sleep_start();
    }
  }
